@@ -25,7 +25,7 @@ const SCHEMA = {
         required: ["name", "domain", "industry", "headcount", "hq", "signal", "fit", "source_ids", "quote", "excluded_reason"],
         properties: {
           name: str, domain: str, industry: str, headcount: str, hq: str, signal: str, fit: num,
-          source_ids: ids, quote: str, excluded_reason: { type: ["string", "null"] },
+          source_ids: ids, quote: str, excluded_reason: str,
         },
       },
     },
@@ -50,7 +50,7 @@ ACCOUNTS: list 10–15 prospective customer companies that are explicitly named 
 - quote: copy a short phrase (under 25 words) VERBATIM from the cited result's text.
 - source_ids: the result numbers that support it. headcount/hq: from the results, else "unknown".
 - fit: 0–100 against the ICP (80+ strong, 60–79 medium, below 60 weak).
-- excluded_reason: set it when a result shows a negative signal from the ICP (layoffs, hiring freeze, off-region, too small); otherwise null. Include 1–3 excluded accounts if the results support it.
+- excluded_reason: set it when a result shows a negative signal from the ICP (layoffs, hiring freeze, off-region, too small); otherwise an empty string. Include 1–3 excluded accounts if the results support it.
 - Do not list the seller itself, competitors, investors, media sites or blogs as accounts.
 COMPETITORS: 4–7 vendors competing with the seller's product (Direct, Indirect, or Alternative such as building in-house), with public pricing if stated, else "Not public". Place each on x = self-serve (0) → enterprise (100), y = flat/subscription billing (0) → usage-native (100).`;
 
@@ -90,18 +90,18 @@ export async function POST(req: Request) {
       const results = batches.flat().filter((r) => (seen.has(r.url) ? false : (seen.add(r.url), true)));
       const list = results.map((r, i) => `[${i + 1}] ${r.title}\n${r.url}\n${r.content}`).join("\n\n");
       const out = await claudeJson<{
-        accounts: { name: string; domain: string; industry: string; headcount: string; hq: string; signal: string; fit: number; source_ids: number[]; quote: string; excluded_reason: string | null }[];
+        accounts: { name: string; domain: string; industry: string; headcount: string; hq: string; signal: string; fit: number; source_ids: number[]; quote: string; excluded_reason: string }[];
         competitors: { name: string; category: Competitor["category"]; positioning: string; pricing: string; differentiator: string; x: number; y: number; source_ids: number[] }[];
       }>(SYSTEM, `ICP:\n${JSON.stringify({ summary: icp.summary, fields: icp.fields })}\n\nSeller product:\n${product}\n\nSearch results:\n${list}`, SCHEMA);
 
       const accounts: Account[] = out.accounts.map((a, i): Account => {
-        const fit = a.excluded_reason ? 0 : Math.max(0, Math.min(100, Math.round(a.fit)));
+        const fit = a.excluded_reason?.trim() ? 0 : Math.max(0, Math.min(100, Math.round(a.fit)));
         return {
           id: `a${i + 1}`, name: a.name, domain: a.domain.replace(/^https?:\/\//, "").replace(/\/.*$/, ""),
           industry: a.industry, headcount: a.headcount, hq: a.hq, signal: a.signal, fit,
           tier: fit >= 80 ? "A" : fit >= 60 ? "B" : "C",
           sources: sources(a.source_ids, results, a.quote),
-          excluded: a.excluded_reason ?? undefined,
+          excluded: a.excluded_reason?.trim() || undefined,
         };
       }).filter((a) => a.sources.length > 0)
         .sort((x, y) => (x.excluded ? 1 : 0) - (y.excluded ? 1 : 0) || y.fit - x.fit);

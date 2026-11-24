@@ -7,6 +7,7 @@ import { Btn, Empty, PageHeader, TierBadge } from "../ui";
 function Status({ s }: { s: EnrichStatus }) {
   if (s === "verified") return <span className="inline-flex items-center gap-1 text-[12px] text-tiera"><CheckCircle2 size={13} /> MX valid</span>;
   if (s === "risky") return <span className="inline-flex items-center gap-1 text-[12px] text-tierb"><AlertTriangle size={13} /> Catch-all, risky</span>;
+  if (s === "invalid") return <span className="inline-flex items-center gap-1 text-[12px] text-muted line-through">No email found</span>;
   return <span className="inline-flex items-center gap-1 text-[12px] text-muted"><Circle size={11} /> Not enriched</span>;
 }
 
@@ -46,9 +47,9 @@ export function OutreachView() {
                   <td>{c.title}</td>
                   <td>{a.name}</td>
                   <td><TierBadge tier={a.tier} /></td>
-                  <td className="num text-[12px]">{c.enriched ? c.email : <span className="text-muted">••••••@{a.domain}</span>}</td>
+                  <td className="num text-[12px]">{c.enriched && c.email ? c.email : <span className="text-muted">••••••@{a.domain}</span>}</td>
                   <td><Status s={c.emailStatus} /></td>
-                  <td className="num text-[12px]">{c.enriched ? <span className="text-tiera">{c.linkedin}</span> : <span className="text-muted">pending</span>}</td>
+                  <td className="num text-[12px]">{c.enriched && c.linkedin ? <span className="text-tiera">{c.linkedin}</span> : <span className="text-muted">{c.enriched ? "not found" : "pending"}</span>}</td>
                 </tr>
               );
             })}

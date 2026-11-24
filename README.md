@@ -20,8 +20,11 @@ Bonus: Band-style multi-agent rail (Planner, Builder, Reviewer, Security) and Fl
 | ICP inference (M1) | **Live**: Claude (`claude-opus-5-5`, structured output) + Tavily evidence for expansion segments |
 | Discovery + competitors (M2) | **Live**: Tavily search → Claude extraction; every citation re-checked against the source text server-side |
 | Knowledge graph (M3) | Built from live accounts/competitors; the founder→advisor link is demo data (would come from a network import) |
-| Enrichment, drafting, sending (M4) | Mock (in progress) |
-| Pipeline (M5) | Live in-app state; reply detection simulated |
+| Enrichment (M4) | **Live**: Hunter.io domain search, one technical + one economic buyer per account, with verification status |
+| Drafting + review (M4) | **Live**: Claude writes signal-cited drafts (Builder), a second Claude pass fact-checks them against sources (Reviewer) |
+| HITL gate (M4) | Enforced in-app: Send is locked until a human approves; sending is simulated (no email leaves the app) |
+| Flexprice (bonus) | Each metered event is forwarded to Flexprice `/events` when `FLEXPRICE_API_KEY` is set; the credit gate is enforced in-app |
+| Pipeline (M5) | Live in-app state; "Check inbox" simulates an inbound reply webhook |
 
 If a key is missing or a live call fails, the app falls back to the cached demo data (fictional companies) and says so in the Agent Thinking panel. The top-bar badges show which modules ran live. Live results are cached in `.cache/` so a recorded demo replays the same run instantly; delete that folder for a fresh run.
 
