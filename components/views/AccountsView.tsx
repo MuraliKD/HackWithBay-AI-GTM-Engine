@@ -27,7 +27,7 @@ export function AccountsView() {
         <table className="grid-dense w-full text-[13px]">
           <thead>
             <tr className="text-left">
-              <th>Company</th><th>Industry</th><th>Size</th><th>Trigger signal</th><th>Fit</th><th>Tier</th><th>Sources</th>
+              <th>Company</th><th>Industry</th><th>Trigger signal</th><th>Fit</th><th>Tier</th><th>Sources</th>
             </tr>
           </thead>
           <tbody>
@@ -38,7 +38,6 @@ export function AccountsView() {
                   <div className="num text-[11px] text-muted">{a.domain}</div>
                 </td>
                 <td className="max-w-[160px] truncate">{a.industry}</td>
-                <td className="num">{a.headcount}</td>
                 <td>
                   {a.excluded
                     ? <span className="rounded bg-accent-soft px-1.5 py-0.5 text-[11.5px] text-accent">Excluded: {a.excluded}</span>
