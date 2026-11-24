@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@theme {
+  --color-paper: #faf8f3;
+  --color-panel: #ffffff;
+  --color-ink: #17161a;
+  --color-muted: #6b6870;
+  --color-line: #e6e2d9;
+  --color-accent: #d9480f;
+  --color-accent-soft: #fdebe2;
+  --color-tiera: #1f7a4d;
+  --color-tierb: #b7791f;
+  --color-tierc: #7a7680;
+  --font-serif: var(--font-newsreader), Georgia, serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jbmono), ui-monospace, monospace;
+}
+
+html, body { background: var(--color-paper); color: var(--color-ink); }
+body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.grid-dense th { font-weight: 500; color: var(--color-muted); text-transform: uppercase; letter-spacing: .04em; font-size: 10.5px; }
+.grid-dense td, .grid-dense th { border-bottom: 1px solid var(--color-line); padding: 7px 10px; white-space: nowrap; }
+.grid-dense tr:hover td { background: #fbfaf6; }
+@keyframes fadein { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
+.fadein { animation: fadein .35s ease-out both; }
+@keyframes dash { to { stroke-dashoffset: -20 } }
+.warm-edge { stroke-dasharray: 6 4; animation: dash 0.8s linear infinite; }
