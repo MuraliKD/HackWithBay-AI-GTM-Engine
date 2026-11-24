@@ -16,8 +16,14 @@ Bonus: Band-style multi-agent rail (Planner, Builder, Reviewer, Security) and Fl
 
 | Piece | State |
 | --- | --- |
-| UI for all 5 modules | Done (clickable prototype) |
-| ICP inference, discovery, enrichment, drafting | **Mock data** (`lib/mock.ts`, fictional companies) — being replaced with live APIs |
+| UI for all 5 modules | Done |
+| ICP inference (M1) | **Live**: Claude (`claude-opus-5-5`, structured output) + Tavily evidence for expansion segments |
+| Discovery + competitors (M2) | **Live**: Tavily search → Claude extraction; every citation re-checked against the source text server-side |
+| Knowledge graph (M3) | Built from live accounts/competitors; the founder→advisor link is demo data (would come from a network import) |
+| Enrichment, drafting, sending (M4) | Mock (in progress) |
+| Pipeline (M5) | Live in-app state; reply detection simulated |
+
+If a key is missing or a live call fails, the app falls back to the cached demo data (fictional companies) and says so in the Agent Thinking panel. The top-bar badges show which modules ran live. Live results are cached in `.cache/` so a recorded demo replays the same run instantly; delete that folder for a fresh run.
 
 ## Run locally
 

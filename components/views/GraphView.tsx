@@ -18,6 +18,9 @@ export function GraphView() {
   const [showPath, setShowPath] = useState(true);
   if (!s.accounts.length) return <Empty text="The graph is built during discovery." />;
   const { nodes, edges, warmPath } = s.graph;
+  const target = nodes.find((n) => n.id === warmPath[2])?.label ?? "your top account";
+  const buyer = nodes.find((n) => n.id === warmPath[3])?.label ?? "buyer";
+  const displaced = s.accounts.find((a) => !a.excluded && a.id === edges.find((e) => e.label === "evaluating")?.from);
   const pos = Object.fromEntries(nodes.map((n) => [n.id, n]));
   const onPath = (a: string, b: string) => {
     const i = warmPath.indexOf(a), j = warmPath.indexOf(b);
@@ -27,7 +30,7 @@ export function GraphView() {
     <div>
       <PageHeader
         kicker="Module 3 · Knowledge graph"
-        title="A warm path into Lumora AI"
+        title={`A warm path into ${target}`}
         lede="Companies, people, products, competitors and signals in one graph. Multi-hop queries find introductions a spreadsheet can't."
         right={
           <>
@@ -69,9 +72,9 @@ export function GraphView() {
           <div className="rounded-lg border border-accent bg-accent-soft p-4">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-accent">Warm intro found · 3 hops</div>
             <ol className="mt-2 space-y-1 text-[13px]">
-              <li>You → <b>R. Menon</b> (advisor)</li>
-              <li>R. Menon → <span className="num text-[11.5px]">previously_employed_at</span> → <b>Lumora AI</b></li>
-              <li>Lumora AI ← <span className="num text-[11.5px]">works_at</span> ← <b>CTO</b></li>
+              <li>You → <b>Advisor</b> (your network)</li>
+              <li>Advisor → <span className="num text-[11.5px]">previously_employed_at</span> → <b>{target}</b></li>
+              <li>{target} ← <span className="num text-[11.5px]">works_at</span> ← <b>{buyer}</b></li>
             </ol>
           </div>
           <div className="rounded-lg border border-line bg-panel p-4">
@@ -84,7 +87,7 @@ WHERE c.tier = 'A'
 RETURN p ORDER BY length(p) LIMIT 5`}</pre>
           </div>
           <div className="rounded-lg border border-line bg-panel p-4 text-[12.5px] text-muted">
-            <b className="text-ink">Displacement watch:</b> Vectorly uses Stripe Billing and is hiring a billing engineer, a likely switch window.
+            <b className="text-ink">Displacement watch:</b> {displaced ? `${displaced.name} (${displaced.signal.toLowerCase()}) is a likely switch window from an incumbent billing tool.` : "No displacement signals yet."}
           </div>
         </div>
       </div>

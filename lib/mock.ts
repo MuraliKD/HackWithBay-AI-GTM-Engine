@@ -199,7 +199,7 @@ export function mockDraftsFor(contacts: Contact[], accounts: Account[]): Draft[]
     return [email];
   }).map((d, i) =>
     i === 4
-      ? { ...d, body: d.body.replace("Saw that", "Congrats on the Series B, and saw that"), reviewerFlag: "Claims \"Series B\", but the cited source says Series A. Please verify before approving." }
+      ? { ...d, body: d.body.replace("Saw that", "Congrats on the Series B, and saw that"), reviewerFlag: "Claims a Series B round, but none of the cited sources mention one. Please verify before approving." }
       : d,
   );
 }

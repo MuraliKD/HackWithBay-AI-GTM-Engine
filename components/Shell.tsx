@@ -41,6 +41,11 @@ export function Shell() {
           <span className="hidden text-[12px] text-muted md:inline">Product description → booked meeting, a human approves every word</span>
         </div>
         <div className="flex items-center gap-4">
+          <div className="hidden items-center gap-1 lg:flex" title="Which modules ran on live APIs in this session">
+            {([["ICP", s.live.icp], ["Discovery", s.live.discovery], ["Enrich", s.live.enrich]] as const).map(([k, on]) => (
+              <span key={k} className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${on ? "bg-tiera/15 text-tiera" : "bg-line text-muted"}`}>{k} {on ? "live" : "demo"}</span>
+            ))}
+          </div>
           <div className="flex items-center gap-2 rounded-md border border-line px-3 py-1" title="Flexprice usage metering">
             <Coins size={14} className="text-accent" />
             <span className="text-[11px] uppercase tracking-wider text-muted">Flexprice</span>

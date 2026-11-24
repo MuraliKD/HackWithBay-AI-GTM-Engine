@@ -3,6 +3,7 @@
 // scripted simulation over lib/mock.ts. Stage 3 swaps each one for a call to
 // an /api route (LLM, Tavily, Hunter, Flexprice) without changing the UI.
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
+import { buildGraph } from "./graph";
 import {
   MOCK_ACCOUNTS, MOCK_COMPETITORS, MOCK_CONTACTS, MOCK_GRAPH, MOCK_ICP, PRODUCT_DESCRIPTION, mockDraftsFor,
 } from "./mock";
@@ -40,6 +41,7 @@ interface Store {
   creditGate: { needed: number; label: string } | null;
   closeCreditGate: () => void;
   graph: typeof MOCK_GRAPH;
+  live: { icp: boolean; discovery: boolean; enrich: boolean };
   runIcp: () => Promise<void>;
   setExpansion: (id: string, status: "accepted" | "dismissed") => void;
   approveIcp: () => Promise<void>;
@@ -70,6 +72,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [usage, setUsage] = useState<UsageEvent[]>([]);
+  const [graph, setGraph] = useState(MOCK_GRAPH);
+  const [live, setLive] = useState<{ icp: boolean; discovery: boolean; enrich: boolean }>({ icp: false, discovery: false, enrich: false });
   const [creditGate, setCreditGate] = useState<{ needed: number; label: string } | null>(null);
   const creditsRef = useRef(STARTING_CREDITS);
   const [credits, setCredits] = useState(STARTING_CREDITS);
@@ -97,12 +101,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setChat((c) => [...c, { role: "user", text: product }]);
     await log("Planner", "Received product brief. Plan: extract → infer ICP → score confidence → propose expansions.");
     meter("icp_inference", 1, "ICP inference");
-    await log("Builder", "Extracting features, pricing model (usage + credits), reference customers…");
-    await log("Builder", "Mapping to NAICS 5415, 5182; inferring headcount and revenue bands…");
-    await log("Builder", "Inferring buyer personas and trigger events…");
-    await log("Reviewer", "Scoring field-level confidence. Lowest: regions (0.70), no explicit geo in brief.", "validate");
-    await log("Planner", "Found 3 adjacent segments. Holding for founder accept/dismiss.", "mention");
-    setIcp(structuredClone(MOCK_ICP));
+    await log("Builder", "Extracting features, pricing model, reference customers with Claude…", "step", 100);
+    let result: Icp = structuredClone(MOCK_ICP);
+    try {
+      const res = await fetch("/api/icp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ product }) });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      result = json.icp;
+      setLive((l) => ({ ...l, icp: true }));
+      await log("Builder", `Mapped industries, size bands, personas and triggers${json.cached ? " (cached run)" : ""}.`);
+    } catch (e) {
+      await log("Security", `Live ICP call unavailable (${(e as Error).message}). Using cached demo ICP.`, "flag");
+    }
+    const low = [...result.fields].sort((a, b) => a.confidence - b.confidence)[0];
+    await log("Reviewer", `Scored field-level confidence. Lowest: ${low.label.toLowerCase()} (${low.confidence.toFixed(2)}).`, "validate");
+    await log("Planner", `Found ${result.expansions.length} expansion segments with web evidence. Holding for founder accept/dismiss.`, "mention");
+    setIcp(result);
     setChat((c) => [...c, { role: "assistant", text: "Here's the ICP I inferred, with a confidence score on each field. I also found three adjacent segments; accept or dismiss each one." }]);
     setBusy(null);
     setView("icp");
@@ -114,32 +128,57 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, [addAudit]);
 
   const approveIcp = useCallback(async () => {
-    setIcp((i) => i && { ...i, approved: true });
+    if (!icp) return;
+    const approved = { ...icp, approved: true };
+    setIcp(approved);
     addAudit("Rep", "Approved ICP", "ICP v1");
     setBusy("discovery");
     setView("accounts");
-    await log("Planner", "ICP approved. Dispatching discovery across websites, filings, press, job posts.");
-    meter("discovery_search", 1, "Discovery run (15 queries)");
-    await log("Builder", "Tavily: \"AI API startup usage-based pricing launch 2026\" → 38 results", "step");
-    await log("Builder", "Tavily: \"hiring billing engineer metering\" → 21 results", "step");
-    for (const a of MOCK_ACCOUNTS) {
-      setAccounts((prev) => [...prev, a]);
-      await sleep(140);
+    await log("Planner", "ICP approved. Dispatching discovery across company sites, press, filings and job posts.");
+    meter("discovery_search", 1, "Discovery run");
+    let found: Account[] = MOCK_ACCOUNTS;
+    let comps: Competitor[] = MOCK_COMPETITORS;
+    let isLive = false;
+    try {
+      const res = await fetch("/api/discover", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ icp: approved, product }) });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      if (!json.accounts?.length) throw new Error("no accounts returned");
+      for (const q of (json.queries as string[]).slice(0, 4)) await log("Builder", `Tavily: "${q}"`, "step", 120);
+      await log("Builder", `${json.resultCount} unique results read${json.cached ? " (cached run)" : ""}.`);
+      found = json.accounts; comps = json.competitors; isLive = true;
+      setLive((l) => ({ ...l, discovery: true }));
+    } catch (e) {
+      await log("Security", `Live discovery unavailable (${(e as Error).message}). Using cached demo accounts.`, "flag");
     }
-    await log("Reviewer", "Validated 15/15 citations resolve. 0 unsupported claims.", "validate");
-    await log("Reviewer", "Excluded Orbitly (hiring freeze) and Sensora (non-target region).", "flag");
-    setCompetitors(MOCK_COMPETITORS);
-    await log("Builder", "Mapped 6 competitors: 3 direct, 2 indirect, 1 alternative.");
+    for (const a of found) {
+      setAccounts((prev) => [...prev, a]);
+      await sleep(120);
+    }
+    const cites = found.reduce((n, a) => n + a.sources.length, 0);
+    await log("Reviewer", `Validated ${cites} citations against source text. Accounts without a source were dropped.`, "validate");
+    const excluded = found.filter((a) => a.excluded);
+    if (excluded.length) await log("Reviewer", `Excluded ${excluded.map((a) => `${a.name} (${a.excluded})`).join(", ")}.`, "flag");
+    setCompetitors(comps);
+    await log("Builder", `Mapped ${comps.length} competitors.`);
+    const g = isLive ? buildGraph(found, comps) : MOCK_GRAPH;
+    setGraph(g);
     meter("graph_query", 1, "Warm-intro path search");
-    await log("Builder", "Graph: MERGE 13 Company, 26 Person, 6 Competitor, 15 Signal nodes.", "graph");
-    await log("Builder", "Graph: shortest warm path Founder → Advisor → Lumora AI → CTO (3 hops).", "graph");
-    setContacts(MOCK_CONTACTS);
-    setLeads(MOCK_CONTACTS.filter((c) => MOCK_ACCOUNTS.find((a) => a.id === c.accountId)!.tier === "A").map((c) => ({
-      id: uid("ld"), contactId: c.id, accountId: c.accountId, stage: "Matched", movedBy: "AI", updatedAt: now(),
-    })));
-    addAudit("AI", "Matched 12 Tier A contacts", "Pipeline");
+    const active = found.filter((a) => !a.excluded);
+    await log("Builder", `Graph: MERGE ${active.length} Company, ${active.length * 2} Person, ${comps.length} Competitor, ${active.length} Signal nodes.`, "graph");
+    if (g.warmPath.length) await log("Builder", `Graph: shortest warm path Founder → Advisor → ${active[0]?.name} → CTO (3 hops).`, "graph");
+    const people: Contact[] = isLive
+      ? active.flatMap((a) => [
+          { id: `${a.id}-c0`, accountId: a.id, name: "CTO", title: "CTO / VP Engineering", persona: "Technical buyer", emailStatus: "none" as const, enriched: false },
+          { id: `${a.id}-c1`, accountId: a.id, name: "Finance lead", title: "Head of Finance", persona: "Economic buyer", emailStatus: "none" as const, enriched: false },
+        ])
+      : MOCK_CONTACTS;
+    setContacts(people);
+    const tierA = people.filter((c) => found.find((a) => a.id === c.accountId)!.tier === "A");
+    setLeads(tierA.map((c) => ({ id: uid("ld"), contactId: c.id, accountId: c.accountId, stage: "Matched" as const, movedBy: "AI" as const, updatedAt: now() })));
+    addAudit("AI", `Matched ${tierA.length} Tier A contacts`, "Pipeline");
     setBusy(null);
-  }, [addAudit, log, meter]);
+  }, [icp, product, addAudit, log, meter]);
 
   const enrich = useCallback(async (tiers: ("A" | "B" | "C")[]) => {
     const targets = contacts.filter((c) => !c.enriched && tiers.includes(accounts.find((a) => a.id === c.accountId)?.tier ?? "C"));
@@ -217,15 +256,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     creditsRef.current = STARTING_CREDITS;
     setCredits(STARTING_CREDITS);
     setIcp(null); setAccounts([]); setCompetitors([]); setContacts([]); setDrafts([]); setLeads([]);
-    setEvents([]); setAudit([]); setUsage([]); setCreditGate(null); setBusy(null);
+    setEvents([]); setAudit([]); setGraph(MOCK_GRAPH); setLive({ icp: false, discovery: false, enrich: false }); setUsage([]); setCreditGate(null); setBusy(null);
     setChat((c) => c.slice(0, 1)); setView("intake");
   }, []);
 
   const value = useMemo<Store>(() => ({
     view, setView, busy, product, setProduct, chat, icp, accounts, competitors, contacts, drafts, leads, events, audit, usage,
-    credits, creditGate, closeCreditGate: () => setCreditGate(null), graph: MOCK_GRAPH,
+    credits, creditGate, closeCreditGate: () => setCreditGate(null), graph, live,
     runIcp, setExpansion, approveIcp, enrich, composeDrafts, updateDraft, sendApproved, moveLead, simulateReply, reset,
-  }), [view, busy, product, chat, icp, accounts, competitors, contacts, drafts, leads, events, audit, usage, credits, creditGate,
+  }), [view, busy, product, chat, icp, accounts, competitors, contacts, drafts, leads, events, audit, usage, credits, creditGate, graph, live,
     runIcp, setExpansion, approveIcp, enrich, composeDrafts, updateDraft, sendApproved, moveLead, simulateReply, reset]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
